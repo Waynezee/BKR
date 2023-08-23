@@ -31,7 +31,7 @@ type instance struct {
 	n            uint64
 	thld         uint64
 	f            uint64
-	round        uint8
+	round        uint32
 	numEcho      uint64
 	numReady     uint64
 	binVals      uint8
@@ -48,8 +48,8 @@ type instance struct {
 
 func initInstance(lg *zap.Logger, tp transport.Transport, blsSig *bls.BlsSig, sequence uint64, n uint64, thld uint64, i uint64) *instance {
 	msg := &message.ConsMessage{
-		Type:     message.VAL,
-		Proposer: info.IDType(i)}
+		Type:     message.ConsMessage_VAL,
+		Proposer: uint32(i)}
 	inst := &instance{
 		lg:          lg,
 		tp:          tp,
@@ -83,7 +83,7 @@ func (inst *instance) insertMsg(msg *message.ConsMessage) (bool, bool) {
 
 	// if len(msg.Content) > 0 {
 	// 	inst.lg.Info("receive msg",
-	// 		zap.String("type", msg.Type.GetName()),
+	// 		zap.String("type", msg.Type.String()),
 	// 		zap.Int("proposer", int(msg.Proposer)),
 	// 		zap.Int("seq", int(msg.Sequence)),
 	// 		zap.Int("round", int(msg.Round)),
@@ -91,7 +91,7 @@ func (inst *instance) insertMsg(msg *message.ConsMessage) (bool, bool) {
 	// 		zap.Int("content", int(msg.Content[0])))
 	// } else {
 	// 	inst.lg.Info("receive msg",
-	// 		zap.String("type", msg.Type.GetName()),
+	// 		zap.String("type", msg.Type.String()),
 	// 		zap.Int("proposer", int(msg.Proposer)),
 	// 		zap.Int("seq", int(msg.Sequence)),
 	// 		zap.Int("round", int(msg.Round)),
@@ -99,39 +99,39 @@ func (inst *instance) insertMsg(msg *message.ConsMessage) (bool, bool) {
 	// }
 
 	switch msg.Type {
-	case message.VAL:
+	case message.ConsMessage_VAL:
 		inst.proposal = msg
 		hash, _ := sha256.ComputeHash(msg.Content)
 		inst.tp.Broadcast(&message.ConsMessage{
-			Type:     message.ECHO,
+			Type:     message.ConsMessage_ECHO,
 			Proposer: msg.Proposer,
 			Sequence: msg.Sequence,
 			Content:  hash})
 		inst.isReadyToSendCoin()
 		return inst.isReadyToEnterNewRound()
-	case message.ECHO:
+	case message.ConsMessage_ECHO:
 		inst.numEcho++
 		if inst.numEcho == inst.thld {
 			inst.tp.Broadcast(&message.ConsMessage{
-				Type:     message.READY,
+				Type:     message.ConsMessage_READY,
 				Proposer: msg.Proposer,
 				Sequence: msg.Sequence,
 				Content:  msg.Content})
 		}
-	case message.READY:
+	case message.ConsMessage_READY:
 		inst.numReady++
 		if inst.numReady == inst.thld && inst.round == 0 {
 			if !inst.hasVotedZero && !inst.hasVotedOne {
 				inst.hasVotedOne = true
 				inst.tp.Broadcast(&message.ConsMessage{
-					Type:     message.BVAL,
+					Type:     message.ConsMessage_BVAL,
 					Proposer: msg.Proposer,
 					Sequence: msg.Sequence,
 					Content:  []byte{1}}) // vote 1
 			}
 			return inst.isReadyToEnterNewRound()
 		}
-	case message.BVAL:
+	case message.ConsMessage_BVAL:
 		var b bool
 		switch msg.Content[0] {
 		case 0:
@@ -142,7 +142,7 @@ func (inst *instance) insertMsg(msg *message.ConsMessage) (bool, bool) {
 		if inst.round == msg.Round && !inst.hasVotedZero && inst.numBvalZero[inst.round] > inst.f {
 			inst.hasVotedZero = true
 			inst.tp.Broadcast(&message.ConsMessage{
-				Type:     message.BVAL,
+				Type:     message.ConsMessage_BVAL,
 				Proposer: msg.Proposer,
 				Round:    inst.round,
 				Sequence: msg.Sequence,
@@ -153,7 +153,7 @@ func (inst *instance) insertMsg(msg *message.ConsMessage) (bool, bool) {
 			if !inst.hasSentAux {
 				inst.hasSentAux = true
 				inst.tp.Broadcast(&message.ConsMessage{
-					Type:     message.AUX,
+					Type:     message.ConsMessage_AUX,
 					Proposer: msg.Proposer,
 					Round:    inst.round,
 					Sequence: msg.Sequence,
@@ -165,7 +165,7 @@ func (inst *instance) insertMsg(msg *message.ConsMessage) (bool, bool) {
 		if inst.round == msg.Round && !inst.hasVotedOne && inst.numBvalOne[inst.round] > inst.f {
 			inst.hasVotedOne = true
 			inst.tp.Broadcast(&message.ConsMessage{
-				Type:     message.BVAL,
+				Type:     message.ConsMessage_BVAL,
 				Proposer: msg.Proposer,
 				Round:    inst.round,
 				Sequence: msg.Sequence,
@@ -176,7 +176,7 @@ func (inst *instance) insertMsg(msg *message.ConsMessage) (bool, bool) {
 			if !inst.hasSentAux {
 				inst.hasSentAux = true
 				inst.tp.Broadcast(&message.ConsMessage{
-					Type:     message.AUX,
+					Type:     message.ConsMessage_AUX,
 					Proposer: msg.Proposer,
 					Round:    inst.round,
 					Sequence: msg.Sequence,
@@ -188,7 +188,7 @@ func (inst *instance) insertMsg(msg *message.ConsMessage) (bool, bool) {
 		if b {
 			return inst.isReadyToEnterNewRound()
 		}
-	case message.AUX:
+	case message.ConsMessage_AUX:
 		switch msg.Content[0] {
 		case 0:
 			inst.numAuxZero[msg.Round]++
@@ -199,7 +199,7 @@ func (inst *instance) insertMsg(msg *message.ConsMessage) (bool, bool) {
 			inst.isReadyToSendCoin()
 			return inst.isReadyToEnterNewRound()
 		}
-	case message.COIN:
+	case message.ConsMessage_COIN:
 		inst.coinMsgs[msg.Round][msg.From] = msg
 		inst.numCoin[msg.Round]++
 		if inst.round == msg.Round {
@@ -232,7 +232,7 @@ func (inst *instance) isReadyToSendCoin() {
 		}
 		inst.hasSentCoin = true
 		inst.tp.Broadcast(&message.ConsMessage{
-			Type:     message.COIN,
+			Type:     message.ConsMessage_COIN,
 			Proposer: inst.proposal.Proposer,
 			Round:    inst.round,
 			Sequence: inst.sequence,
@@ -298,7 +298,7 @@ func (inst *instance) isReadyToEnterNewRound() (bool, bool) {
 		inst.round++
 
 		inst.tp.Broadcast(&message.ConsMessage{
-			Type:     message.BVAL,
+			Type:     message.ConsMessage_BVAL,
 			Proposer: inst.proposal.Proposer,
 			Round:    inst.round,
 			Sequence: inst.sequence,
@@ -320,7 +320,7 @@ func (inst *instance) getCoinInfo() []byte {
 	b := make([]byte, 17)
 	b = append(b, bsender...)
 	b = append(b, bseq...)
-	b = append(b, inst.round)
+	b = append(b, uint8(inst.round))
 
 	return b
 }
@@ -332,8 +332,8 @@ func (inst *instance) canVoteZero(sender info.IDType, seq uint64) {
 	if inst.round == 0 && !inst.hasVotedZero && !inst.hasVotedOne {
 		inst.hasVotedZero = true
 		inst.tp.Broadcast(&message.ConsMessage{
-			Type:     message.BVAL,
-			Proposer: sender,
+			Type:     message.ConsMessage_BVAL,
+			Proposer: uint32(sender),
 			Round:    inst.round,
 			Sequence: seq,
 			Content:  []byte{0}}) // vote 0

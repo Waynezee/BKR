@@ -14,17 +14,18 @@ import (
 var maxbatchsize = 1
 
 type state struct {
-	lg        *zap.Logger
-	tp        transport.Transport
-	blsSig    *bls.BlsSig
-	proposer  *Proposer
-	id        info.IDType
-	n         uint64
-	collected uint64
-	execs     map[uint64]*asyncCommSubset
-	lock      sync.RWMutex
-	reqc      chan *message.ConsMessage
-	repc      chan []byte
+	lg          *zap.Logger
+	tp          transport.Transport
+	blsSig      *bls.BlsSig
+	proposer    *Proposer
+	id          info.IDType
+	n           uint64
+	collected   uint64
+	execs       map[uint64]*asyncCommSubset
+	lock        sync.RWMutex
+	reqc        chan *message.ConsMessage
+	repc        chan []byte
+	proposeChan chan uint64 //seq to be proposed
 }
 
 func initState(lg *zap.Logger,
@@ -32,19 +33,22 @@ func initState(lg *zap.Logger,
 	blsSig *bls.BlsSig,
 	id info.IDType,
 	proposer *Proposer,
-	n uint64, repc chan []byte) *state {
+	n uint64,
+	repc chan []byte,
+	proposeChan chan uint64) *state {
 	st := &state{
-		lg:        lg,
-		tp:        tp,
-		blsSig:    blsSig,
-		id:        id,
-		proposer:  proposer,
-		n:         n,
-		collected: 0,
-		execs:     make(map[uint64]*asyncCommSubset),
-		lock:      sync.RWMutex{},
-		reqc:      make(chan *message.ConsMessage, 2*int(n)*maxbatchsize),
-		repc:      repc}
+		lg:          lg,
+		tp:          tp,
+		blsSig:      blsSig,
+		id:          id,
+		proposer:    proposer,
+		n:           n,
+		collected:   0,
+		execs:       make(map[uint64]*asyncCommSubset),
+		lock:        sync.RWMutex{},
+		reqc:        make(chan *message.ConsMessage, 2*int(n)*maxbatchsize),
+		repc:        repc,
+		proposeChan: proposeChan}
 	go st.run()
 	return st
 }
@@ -58,6 +62,7 @@ func (st *state) insertMsg(msg *message.ConsMessage) {
 	} else {
 		if st.collected <= msg.Sequence {
 			st.lock.RUnlock()
+			// st.proposeChan <- msg.Sequence
 			exec := initACS(st, st.lg, st.tp, st.blsSig, st.proposer, msg.Sequence, st.n, st.reqc)
 			st.lock.Lock()
 			if e, ok := st.execs[msg.Sequence]; ok {
@@ -79,8 +84,8 @@ func (st *state) garbageCollect(seq uint64) {
 func (st *state) run() {
 	for {
 		req := <-st.reqc
-		if req.Proposer == st.id {
-			st.repc <- []byte{}
+		if info.IDType(req.Proposer) == st.id {
+			st.repc <- req.Content
 		}
 	}
 }

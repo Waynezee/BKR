@@ -15,7 +15,7 @@ for ((i = 0; i < SUM; i++)); do
         node="node"$id
 
         expect <<-END
-spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "cd;cd bkr/script;./stop.sh main"
+spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "cd;cd themix/script;./stop.sh main"
 expect EOF
 exit
 END

@@ -1,6 +1,9 @@
 package transport
 
 import (
+	"crypto/ecdsa"
+	"fmt"
+
 	"bkr-go/transport/http"
 	"bkr-go/transport/info"
 	"bkr-go/transport/message"
@@ -14,7 +17,8 @@ type Transport interface {
 
 // InitTransport executes transport layer initiliazation, which returns transport, a channel
 // for received ConsMessage, a channel for received requests, and a channel for reply
-func InitTransport(lg *zap.Logger, id info.IDType, port int, peers []string) (Transport,
-	chan *message.ConsMessage, chan []byte, chan []byte) {
-	return http.InitTransport(lg, id, port, peers)
+func InitTransport(lg *zap.Logger, id info.IDType, port int, peers []http.Peer, pk *ecdsa.PrivateKey, batch int) (Transport,
+	chan *message.ConsMessage, chan []byte, chan []byte, chan struct{}, chan []byte) {
+	fmt.Println("client prot:", port)
+	return http.InitTransport(lg, id, port, peers, pk, batch)
 }

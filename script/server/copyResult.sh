@@ -14,14 +14,14 @@ for ((i = 0; i < NUM; i++)); do
 
         expect -c "
 set timeout -1
-spawn scp -i $key $user@$host:bkr/i ./log/server$id/
+spawn scp -i $key $user@$host:themix/server$id.output ./log/server$id/
 expect 100%
 exit
 "
 
         expect -c "
 set timeout -1
-spawn scp -i $key $user@$host:bkr/log/server$id ./log/server$id/
+spawn scp -i $key $user@$host:themix/log/server$id ./log/server$id/
 expect 100%
 exit
 "

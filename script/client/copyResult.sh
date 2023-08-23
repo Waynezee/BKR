@@ -14,10 +14,11 @@ for ((i = 0; i < NUM; i++)); do
   node="node"$id
   expect -c "
 set timeout -1
-spawn scp -i $key $user@$host:client/client.log ./log/client$id/$NAME
+spawn scp -i $key $user@$host:client/client$id.output ./log/client$id/$NAME.output
 expect 100%
 exit
 "
+
 } &
 done
 

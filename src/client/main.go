@@ -5,84 +5,129 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"strings"
+	"net/rpc"
+	"strconv"
+	"sync"
 	"time"
 
-	"bkr-go/client/proto/clientpb"
-
-	"google.golang.org/protobuf/proto"
+	"bkr-go/transport/message"
 )
 
+type Client struct {
+	startId     int32
+	port        int
+	payloadSize int
+	rate        int
+	testTime    int
+	reqNum      int
+	outputFile  string
+	startTime   map[int32]uint64
+	replyChan   chan *message.NodeReply
+	endChan     chan struct{}
+	lock        sync.RWMutex
+}
+
+func (c *Client) startRpcServer() {
+	rpc.Register(c)
+	rpc.HandleHTTP()
+	listener, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(c.port+100))
+	if err != nil {
+		panic(err)
+	}
+	go http.Serve(listener, nil)
+}
+
+func (c *Client) NodeFinish(msg *message.NodeReply, resp *message.Response) error {
+	c.replyChan <- msg
+	return nil
+}
+
+func (c *Client) dealReply() {
+	// file, err := os.OpenFile(c.outputFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_TRUNC, 0666)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer file.Close()
+	for {
+		select {
+		case msg := <-c.replyChan:
+			start := int32(msg.StartID)
+			// for i := 0; i < int(msg.ReqNum)/c.reqNum; i++ {
+			c.lock.RLock()
+			fmt.Printf("recv: %d %d %d %d\n", start, c.reqNum, uint64(time.Now().UnixNano()/1000000), uint64(time.Now().UnixNano()/1000000)-c.startTime[start])
+			c.lock.RUnlock()
+			// 	start += int32(c.reqNum)
+			// }
+		case <-c.endChan:
+			return
+		}
+	}
+}
+
+func (c *Client) run() {
+	testTimer := time.NewTimer(time.Duration(c.testTime*1000) * time.Millisecond)
+	fmt.Println("test start")
+	payload := make([]byte, c.payloadSize*c.reqNum)
+	cli, err := rpc.DialHTTP("tcp", "127.0.0.1:"+strconv.Itoa(c.port))
+	if err != nil {
+		panic(err)
+	}
+	c.lock.Lock()
+	c.startTime[c.startId] = uint64(time.Now().UnixNano() / 1000000)
+	c.lock.Unlock()
+	for {
+		select {
+		case <-testTimer.C:
+			c.endChan <- struct{}{}
+			fmt.Println("test end")
+			return
+		default:
+			// send reqs to server
+			req := &message.ClientReq{
+				StartId: c.startId,
+				ReqNum:  int32(c.reqNum),
+				Payload: payload,
+			}
+
+			var resp message.Response
+			go cli.Call("ClientMsgProcessor.Request", req, &resp)
+			c.lock.Lock()
+			c.startTime[c.startId] = uint64(time.Now().UnixNano() / 1000000)
+			c.lock.Unlock()
+			fmt.Printf("send: %d %d %d\n", c.startId, c.reqNum, time.Now().UnixNano()/1000000)
+			c.startId += int32(c.reqNum)
+			// c.startTime = append(c.startTime, uint64(time.Now().UnixNano()/1000000))
+			time.Sleep(time.Millisecond * 50)
+		}
+	}
+}
+
 func main() {
-	batchSize := flag.Int("batch", 2, "batch size")
+	// id := flag.Int("id", 0, "client id")
+	// batchSize := flag.Int("batch", 2, "batch size")
 	payloadSize := flag.Int("payload", 200, "payload size")
-	keyPath := flag.String("key", "../crypto", "path of ECDSA private key")
-	url := flag.String("url", "http://127.0.0.1:11300/client", "url of client")
+	// keyPath := flag.String("key", "../../../crypto", "path of ECDSA private key")
+	port := flag.Int("port", 6100, "url of client")
+	rate := flag.Int("rate", 60, "test time")
 	testTime := flag.Int("time", 60, "test time")
 	output := flag.String("output", "client.log", "output file")
 	flag.Parse()
 
-	buffer, err := generatePayload(*batchSize, *payloadSize, *keyPath)
-	if err != nil {
-		panic(err)
+	c := &Client{
+		startId:     1,
+		port:        *port,
+		payloadSize: *payloadSize,
+		rate:        *rate,
+		testTime:    *testTime,
+		outputFile:  *output,
+		startTime:   make(map[int32]uint64),
+		replyChan:   make(chan *message.NodeReply, 1024),
+		endChan:     make(chan struct{}),
+		lock:        sync.RWMutex{},
 	}
+	c.reqNum = c.rate / 20
+	c.startRpcServer()
+	go c.dealReply()
+	c.run()
 
-	client := &http.Client{
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   5 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			MaxIdleConns:        200,
-			MaxIdleConnsPerHost: 200,
-			IdleConnTimeout:     time.Duration(60),
-		},
-	}
-
-	file, err := os.OpenFile(*output, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_TRUNC, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	startTime := time.Now()
-	endTime := time.Now()
-	oldTime := endTime
-	for endTime.Sub(startTime) < time.Duration(*testTime)*time.Second {
-		body := strings.NewReader(string(buffer))
-		req, err := http.NewRequest("POST", *url, body)
-		if err != nil {
-			panic(err)
-		}
-		req.Header.Set("Content-Type", "application/x-protobuf")
-		resp, err := client.Do(req)
-		if err != nil {
-			panic(err)
-		}
-		resp.Body.Close()
-		endTime = time.Now()
-		file.Write([]byte(fmt.Sprintf("%d\n", endTime.Sub(oldTime).Milliseconds())))
-		oldTime = endTime
-	}
-
-	file.Write([]byte("start time: " + startTime.String() + "\n"))
-	file.Write([]byte("end time: " + endTime.String() + "\n"))
-	file.Write([]byte(fmt.Sprintf("%d\n", endTime.Sub(startTime).Milliseconds())))
-}
-
-func generatePayload(batchsize, payload int, key string) ([]byte, error) {
-	message := &clientpb.ClientMessage{}
-	for i := 0; i < payload; i++ {
-		message.Payload += "a"
-	}
-	clientMessages := &clientpb.ClientMessages{}
-	for i := 0; i < batchsize; i++ {
-		clientMessages.Payload = append(clientMessages.Payload, message)
-	}
-	buffer, err := proto.Marshal(clientMessages)
-	if err != nil {
-		return nil, fmt.Errorf("proto.Marshal: %v", err)
-	}
-	return buffer, nil
 }

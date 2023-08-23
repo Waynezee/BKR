@@ -12,10 +12,10 @@ for ((i = 0; i < NUM; i++)); do
   key="~/.ssh/aws"
   id=$i
   node="node"$id
-  cmd="cd;cd bkr;nohup ./main --batch $2 > /dev/null 2>&1 &"
+  cmd="cd;cd themix;nohup ./main --batch $2 > /dev/null 2>&1 &"
 
 expect <<-END
-spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "cd;cd bkr;nohup ./main > i 2>&1 &"
+spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "cd;cd themix;nohup ./main -conf ./node.json -debug=true -batch=10000 > server$i.output 2>&1 &"
 expect EOF
 exit
 END

@@ -9,10 +9,11 @@ latency = []
 tx = 0
 
 for i in range(nodes):
-    filename = path + '/client'+ str(i) + '/' + filen
+    filename = path + str(i) + '/' + filen
     latency_one = []
     with open(filename,"r") as f:
         lines = f.readlines()
+        tx += len(lines)
         for line in lines:
             try:
                 if(sum(latency_one) <= duration * 1000):
@@ -20,12 +21,10 @@ for i in range(nodes):
                     latency.append(data)
                     latency_one.append(data)
                 else:
-                    print("s:", len(latency))
-                    print(len(latency_one))
                     break
             except:
                 break
 
-print("Total Time (s): ", duration)
-print("Throughput (tx/s): ", len(latency) * bathsize / duration)
+print("Total Time (ms): ", duration)
+print("Throughput (tx/s): ", tx * bathsize / duration)
 print("Latency (ms): ", sum(latency)/len(latency))

@@ -1,0 +1,58 @@
+syntax = "proto3";
+package message;
+
+option go_package = "../message";
+// const (
+// 	VAL   MessageType = 0
+// 	ECHO  MessageType = 1
+// 	READY MessageType = 2
+// 	BVAL  MessageType = 3
+// 	AUX   MessageType = 4
+// 	COIN  MessageType = 5
+// )
+// type ConsMessage struct {
+// 	Type      MessageType
+// 	Proposer  info.IDType
+// 	From      info.IDType
+// 	Round     uint8
+// 	Sequence  uint64
+// 	Signature []byte
+// 	Content   []byte
+// }
+
+
+
+message ConsMessage {
+    enum MessageType {
+        VAL = 0;
+        ECHO = 1;
+        READY = 2;
+        BVAL = 3;
+        AUX = 4;
+        COIN = 5;
+    }
+    MessageType type = 1;
+    uint32 proposer = 2; 
+    uint32 from = 3;
+    uint32 round = 4; 
+    uint64 sequence = 5; 
+    bytes signature = 6;
+    bytes content = 7;
+}
+
+message ClientReq {
+    int32 startId = 1;
+    int32 reqNum = 2;
+    bytes payload = 3;
+}
+
+message ClientResp {
+
+}
+
+message Batch {
+    repeated  ClientReq reqs = 1;
+}
+
+
+// protoc -I=. -I=$GOPATH/src -I=$GOPATH/src/github.com/gogo/protobuf/protobuf --gogofaster_out=../common message.proto

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"fmt"
 	"sync"
+	"time"
 
 	"bkr-go/transport"
 	"bkr-go/transport/info"
@@ -12,16 +14,21 @@ import (
 
 // Proposer is responsible for proposing requests
 type Proposer struct {
-	lg   *zap.Logger
-	reqc chan []byte
-	tp   transport.Transport
-	seq  uint64
-	id   info.IDType
-	lock sync.Mutex
+	lg           *zap.Logger
+	reqc         chan []byte
+	tp           transport.Transport
+	seq          uint64
+	id           info.IDType
+	hasProposed  map[uint64]bool
+	proposerChan chan struct{}
+	pc           chan uint64
+	restoreChan  chan []byte
+	lock         sync.Mutex
 }
 
-func initProposer(lg *zap.Logger, tp transport.Transport, id info.IDType, reqc chan []byte) *Proposer {
-	proposer := &Proposer{lg: lg, tp: tp, id: id, reqc: reqc, lock: sync.Mutex{}}
+func initProposer(lg *zap.Logger, tp transport.Transport, id info.IDType, reqc chan []byte, proposerChan chan struct{}, pc chan uint64, restoreChan chan []byte) *Proposer {
+	hasProposed := make(map[uint64]bool)
+	proposer := &Proposer{lg: lg, tp: tp, id: id, reqc: reqc, hasProposed: hasProposed, proposerChan: proposerChan, pc: pc, restoreChan: restoreChan, lock: sync.Mutex{}}
 	go proposer.run()
 	return proposer
 }
@@ -37,21 +44,32 @@ func (proposer *Proposer) proceed(seq uint64) {
 
 func (proposer *Proposer) run() {
 	var req []byte
+	var sequence uint64
+	req = <-proposer.reqc
+	proposer.propose(req, sequence)
 	for {
-		req = <-proposer.reqc
-		proposer.propose(req)
+		// req = <-proposer.reqc
+		// proposer.propose(req)
+		sequence = <-proposer.pc
+		fmt.Println(sequence)
+		if !proposer.hasProposed[sequence] {
+			proposer.hasProposed[sequence] = true
+			proposer.proposerChan <- struct{}{}
+			req = <-proposer.reqc
+			proposer.propose(req, sequence)
+			time.Sleep(time.Millisecond * time.Duration(200))
+		}
+
 	}
 }
 
 // Propose broadcast a propose message with the given request and the current sequence number
-func (proposer *Proposer) propose(request []byte) {
-	proposer.lock.Lock()
-
+func (proposer *Proposer) propose(request []byte, seq uint64) {
 	msg := &message.ConsMessage{
-		Type:     message.VAL,
-		Proposer: proposer.id,
-		From:     proposer.id,
-		Sequence: proposer.seq,
+		Type:     message.ConsMessage_VAL,
+		Proposer: uint32(proposer.id),
+		From:     uint32(proposer.id),
+		Sequence: seq,
 		Content:  request}
 
 	if len(request) > 0 {
@@ -60,10 +78,6 @@ func (proposer *Proposer) propose(request []byte) {
 			zap.Int("seq", int(msg.Sequence)),
 			zap.Int("content", int(msg.Content[0])))
 	}
-
-	proposer.seq++
-
-	proposer.lock.Unlock()
 
 	proposer.tp.Broadcast(msg)
 }

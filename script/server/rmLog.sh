@@ -13,7 +13,7 @@ for ((i = 0; i < NUM; i++)); do
         node="node"$id
 
         expect <<-END
-spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "rm ./bkr/log/server$id"
+spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "rm ./themix/log/server$id"
 expect EOF
 exit
 END
