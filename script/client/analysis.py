@@ -115,7 +115,7 @@ def terminal_plot(series, delta):
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("usage: python3 analysis_bkr.py [number of clients] [name of logfile] [test time]")
+        print("usage: python3 analysis.py [number of clients] [name of logfile] [test time]")
     total_nodes = int(sys.argv[1])
     name = str(sys.argv[2])
     duration = int(sys.argv[3])
