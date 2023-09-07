@@ -1,7 +1,7 @@
 #!/bin/bash
 
 NUM=$1
-
+BATCH=$2
 for ((i = 0; i < NUM; i++)); do
 
 {
@@ -15,7 +15,7 @@ for ((i = 0; i < NUM; i++)); do
   cmd="cd;cd themix;nohup ./main --batch $2 > /dev/null 2>&1 &"
 
 expect <<-END
-spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "cd;cd themix;nohup ./main -conf ./node.json -debug=true -batch=10000 > server$i.output 2>&1 &"
+spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "cd;cd themix;nohup ./main -conf ./node.json -debug=true -batch=$BATCH > server$i.output 2>&1 &"
 expect EOF
 exit
 END

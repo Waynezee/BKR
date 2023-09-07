@@ -1,8 +1,9 @@
 #!/bin/bash
 
 NUM=$1
-BATCH=$2
-TIME=$3
+RATE=$2
+PAYLOAD=$3
+TIME=$4
 
 for ((i = 0; i < NUM; i++)); do
 {
@@ -17,7 +18,7 @@ for ((i = 0; i < NUM; i++)); do
   node="node"$id
 
 expect <<-END
-spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "cd;cd client;./client -rate=50 -payload=1000 -port=6100 -time=30 -output client$i.log > client$i.output &"
+spawn ssh -oStrictHostKeyChecking=no -i $key $user@$host "cd;cd client;./client -rate=$RATE -payload=$PAYLOAD -port=6100 -time=$TIME -output client$i.log > client$i.output &"
 expect EOF
 exit
 END

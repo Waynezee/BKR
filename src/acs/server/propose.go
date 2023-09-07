@@ -3,7 +3,6 @@ package server
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"bkr-go/transport"
 	"bkr-go/transport/info"
@@ -57,7 +56,7 @@ func (proposer *Proposer) run() {
 			proposer.proposerChan <- struct{}{}
 			req = <-proposer.reqc
 			proposer.propose(req, sequence)
-			time.Sleep(time.Millisecond * time.Duration(200))
+			// time.Sleep(time.Millisecond * time.Duration(200))
 		}
 
 	}
